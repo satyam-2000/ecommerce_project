@@ -1,5 +1,8 @@
 package com.example.ecommerce.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,7 +12,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class ProductDTO {
 
-    private Long productID;
+    @NotBlank
+    @Size(min = 3, message = "Product Name must contains at lease 3 characters")
     private String productName;
     private String description;
     private Integer quantity;

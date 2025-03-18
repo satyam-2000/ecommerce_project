@@ -9,17 +9,28 @@ import java.util.UUID;
 
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.ecommerce.dto.ProductDTO;
 import com.example.ecommerce.dto.ProductResponseDTO;
+import com.example.ecommerce.exception.ApiException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.model.Category;
 import com.example.ecommerce.model.Product;
+import com.example.ecommerce.model.User;
 import com.example.ecommerce.repository.CategoryRepository;
 import com.example.ecommerce.repository.ProductRepository;
+import com.example.ecommerce.repository.UserRepository;
 
 @Service
 public class ProductServiceImpl implements ProductService {
@@ -33,11 +44,28 @@ public class ProductServiceImpl implements ProductService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private FileService fileService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Value("${image.path}")
+    private String path;
+
     @Override
     public ProductDTO addProduct(Long categoryId, ProductDTO productDTO) {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("category", "id", categoryId));
+        Product productInDb = productRepository.findByProductName(productDTO.getProductName());
+        if (productInDb != null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Product with the same name already exists");
+        }
         Product product = modelMapper.map(productDTO, Product.class);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        User user = userRepository.findByUsername(username);
+        product.setSeller(user);
         product.setCategory(category);
         product.setSpecialPrice(product.getPrice() - (product.getPrice() * product.getDiscount() * 0.01));
         Product savedProduct = productRepository.save(product);
@@ -46,8 +74,15 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductResponseDTO getAllProducts() {
-        List<Product> products = productRepository.findAll();
+    public ProductResponseDTO getAllProducts(Integer page, Integer limit, String sortBy, String sortOrder) {
+        Sort sortByandOrder = sortOrder.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(page, limit, sortByandOrder);
+        Page<Product> pageableProducts = productRepository.findAll(pageable);
+        List<Product> products = pageableProducts.getContent();
+        if (products.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "No Products found");
+        }
         List<ProductDTO> productDTOs = products.stream().map(e -> modelMapper.map(e, ProductDTO.class)).toList();
         ProductResponseDTO productResponseDTO = new ProductResponseDTO();
         productResponseDTO.setContent(productDTOs);
@@ -57,6 +92,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ProductResponseDTO getAllProductsByCategoryId(Long categoryId) {
         List<Product> products = productRepository.findAllByCategory_CategoryId(categoryId);
+        if (products.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "No Product found");
+        }
         List<ProductDTO> productDTOs = products.stream().map(e -> modelMapper.map(e, ProductDTO.class)).toList();
         ProductResponseDTO productResponseDTO = new ProductResponseDTO();
         productResponseDTO.setContent(productDTOs);
@@ -66,6 +104,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ProductResponseDTO searchProductByKeyword(String keyword) {
         List<Product> products = productRepository.findAllByProductNameContainingLikeIgnoreCase(keyword);
+        if (products.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "No Product found");
+        }
         List<ProductDTO> productDTOs = products.stream().map(e -> modelMapper.map(e, ProductDTO.class)).toList();
         ProductResponseDTO productResponseDTO = new ProductResponseDTO();
         productResponseDTO.setContent(productDTOs);
@@ -106,8 +147,7 @@ public class ProductServiceImpl implements ProductService {
 
         // Upload image to server
         // Get the file name of uploaded image
-        String path = "C:\\Users\\rasto\\Desktop\\ecommerce\\images";
-        String fileName = uploadImage(path, image);
+        String fileName = fileService.uploadImage(image, path);
         // Updating the new file name to the product
         productFromDb.setImage(fileName);
 
@@ -117,29 +157,6 @@ public class ProductServiceImpl implements ProductService {
         ProductDTO res = modelMapper.map(updatedProduct, ProductDTO.class);
         return res;
 
-    }
-
-    private String uploadImage(String path, MultipartFile file) throws IOException {
-        // Get the file name of the original file
-        String originalFileName = file.getOriginalFilename();
-
-        // Rename the file by generate file name
-        String randomId = UUID.randomUUID().toString();
-        String newFileName = randomId.concat(originalFileName.substring(originalFileName.lastIndexOf('.')));
-        String filePath = path + File.separator + newFileName;
-
-        // Check if path existed and create
-        File folder = new File(path);
-
-        if (folder.exists()) {
-            folder.mkdir();
-        }
-
-        // Upload to server
-        Files.copy(file.getInputStream(), Paths.get(filePath));
-
-        // Return filename
-        return newFileName;
     }
 
 }

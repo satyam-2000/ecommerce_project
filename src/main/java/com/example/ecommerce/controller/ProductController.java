@@ -15,10 +15,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.ecommerce.config.AppConstant;
 import com.example.ecommerce.dto.ProductDTO;
 import com.example.ecommerce.dto.ProductResponseDTO;
 import com.example.ecommerce.model.Product;
 import com.example.ecommerce.service.ProductService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api")
@@ -28,14 +31,19 @@ public class ProductController {
     private ProductService productService;
 
     @PostMapping("/category/{categoryId}/product")
-    public ResponseEntity<ProductDTO> addProduct(@PathVariable Long categoryId, @RequestBody ProductDTO productDTO) {
+    public ResponseEntity<ProductDTO> addProduct(@PathVariable Long categoryId,
+            @Valid @RequestBody ProductDTO productDTO) {
         ProductDTO savedProductDTO = productService.addProduct(categoryId, productDTO);
         return ResponseEntity.ok(savedProductDTO);
     }
 
     @GetMapping("/product")
-    public ResponseEntity<ProductResponseDTO> getAllProducts() {
-        ProductResponseDTO productResponseDTO = productService.getAllProducts();
+    public ResponseEntity<ProductResponseDTO> getAllProducts(
+            @RequestParam(name = "page", defaultValue = AppConstant.PAGE_NUMBER, required = false) Integer page,
+            @RequestParam(name = "limit", defaultValue = AppConstant.LIMIT, required = false) Integer limit,
+            @RequestParam(name = "sortBy", defaultValue = AppConstant.SORT_PRODUCT_BY, required = false) String sortBy,
+            @RequestParam(name = "sortBy", defaultValue = AppConstant.SORT_ORDER, required = false) String sortOrder) {
+        ProductResponseDTO productResponseDTO = productService.getAllProducts(page, limit, sortBy, sortOrder);
         return ResponseEntity.ok(productResponseDTO);
     }
 
